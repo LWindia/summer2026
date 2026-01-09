@@ -180,7 +180,7 @@ export default function QueryForm() {
 
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4">
+    <div id="query" className="min-h-screen bg-black flex items-center justify-center p-4">
       <Toaster position="top-center" reverseOrder={false} />
       
       <div className="w-full max-w-4xl bg-white rounded-xl shadow-2xl overflow-hidden">

@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "#Placement", text: "Placement" },
   // { href: "#JAZBAA", text: "JAZBAA" },
   { href: "#Preivous", text: "Previous Summer" },
+  { href: "#query", text: "Inquiry Form" },
 ];
 
 // Route Configuration

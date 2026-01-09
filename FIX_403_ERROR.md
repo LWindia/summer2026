@@ -72,3 +72,4 @@ Once you've redeployed and updated the environment variable:
 2. You'll see `✅ Application form data saved to Google Sheets successfully` in the logs
 3. Data will appear in your Google Sheet
 
+
