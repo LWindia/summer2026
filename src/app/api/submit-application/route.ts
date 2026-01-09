@@ -14,7 +14,8 @@ export async function POST(req: Request) {
     // Get form data
     const formData = await req.json();
     const { step, isPartial, ...applicationData } = formData;
-    console.log('Received form data:', { step, isPartial, applicationData });
+    console.log('📥 Received form data:', { step, isPartial, applicationData });
+    console.log('📥 Full form data received:', JSON.stringify(formData, null, 2));
 
     // Send data to Google Sheets via Google Apps Script (for both partial and complete submissions)
     const googleAppsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL_APPLICATION_FORM;
@@ -27,16 +28,32 @@ export async function POST(req: Request) {
         console.log(`📤 Sending application form data to Google Sheets (${submissionType}, Step ${step})...`);
         console.log('📋 Data being sent:', { ...applicationData, step: step || '', isPartial: isPartial !== undefined ? isPartial : true });
         
+        // Ensure all fields are included, even if empty
+        const payloadToGoogle = {
+          fullName: applicationData.fullName || '',
+          whatsappNo: applicationData.whatsappNo || '',
+          emailAddress: applicationData.emailAddress || '',
+          collegeName: applicationData.collegeName || '',
+          branch: applicationData.branch || '',
+          currentSemester: applicationData.currentSemester || '',
+          applyingFor: applicationData.applyingFor || '',
+          otherSpecification: applicationData.otherSpecification || '',
+          tentativeDates: applicationData.tentativeDates || '',
+          referenceName: applicationData.referenceName || '',
+          source: applicationData.source || '',
+          query: applicationData.query || '',
+          step: step || '',
+          isPartial: isPartial !== undefined ? isPartial : true,
+        };
+        
+        console.log('📤 Sending to Google Sheets:', JSON.stringify(payloadToGoogle, null, 2));
+        
         const googleResponse = await fetch(googleAppsScriptUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            ...applicationData,
-            step: step || '',
-            isPartial: isPartial !== undefined ? isPartial : true,
-          }),
+          body: JSON.stringify(payloadToGoogle),
         });
 
         console.log(`📥 Google Apps Script response status: ${googleResponse.status}`);

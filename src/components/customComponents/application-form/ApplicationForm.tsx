@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
@@ -109,31 +109,53 @@ export function ApplicationForm() {
   // Debounce timer for autosave
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null)
   const lastSavedDataRef = useRef<string>('')
+  const isSavingRef = useRef<boolean>(false)
 
   // Auto-save function (silent background save - only shows errors)
-  const autoSave = async (step: number, values: Partial<FormValues>, showToast: boolean = false) => {
+  // Wrapped in useCallback to prevent stale closures
+  const autoSave = useCallback(async (step: number, values: Partial<FormValues>, showToast: boolean = false) => {
+    // Prevent concurrent saves
+    if (isSavingRef.current) {
+      console.log(`⏸️ [Step ${step}] Save already in progress, skipping...`)
+      return
+    }
+    
     try {
+      isSavingRef.current = true
       setIsSaving(true)
       console.log(`🔄 [Step ${step}] Auto-saving all accumulated data...`)
       console.log(`🔄 [Step ${step}] Data being sent:`, {
         step,
         isPartial: true,
-        fullName: values.fullName,
-        whatsappNo: values.whatsappNo,
-        emailAddress: values.emailAddress,
-        collegeName: values.collegeName,
-        branch: values.branch,
-        currentSemester: values.currentSemester,
-        applyingFor: values.applyingFor,
-        tentativeDates: values.tentativeDates,
-        source: values.source,
-        referenceName: values.referenceName,
-        query: values.query,
+        fullName: values.fullName || '',
+        whatsappNo: values.whatsappNo || '',
+        emailAddress: values.emailAddress || '',
+        collegeName: values.collegeName || '',
+        branch: values.branch || '',
+        currentSemester: values.currentSemester || '',
+        applyingFor: values.applyingFor || '',
+        otherSpecification: values.otherSpecification || '',
+        tentativeDates: values.tentativeDates || '',
+        source: values.source || '',
+        referenceName: values.referenceName || '',
+        query: values.query || '',
       })
       
+      // Ensure all fields are included, even if empty
       const payload = {
-        ...values,
-        step,
+        fullName: values.fullName || '',
+        whatsappNo: values.whatsappNo || '',
+        emailAddress: values.emailAddress || '',
+        collegeName: values.collegeName || '',
+        branch: values.branch || '',
+        currentSemester: values.currentSemester || '',
+        applyingFor: values.applyingFor || '',
+        otherSpecification: values.otherSpecification || '',
+        tentativeDates: values.tentativeDates || '',
+        referenceName: values.referenceName || '',
+        source: values.source || '',
+        query: values.query || '',
+        step: step || 1,
         isPartial: true,
       }
       
@@ -193,12 +215,15 @@ export function ApplicationForm() {
       })
     } finally {
       setIsSaving(false)
+      isSavingRef.current = false
     }
-  }
+  }, [completedSteps])
 
   // Save data when step changes (ensures step 1 data is saved when moving to step 2)
   useEffect(() => {
-    // Skip on initial mount
+    // Skip on initial mount or if already saving
+    if (isSavingRef.current) return
+    
     const allValues = form.getValues()
     const hasAnyData = allValues.fullName || allValues.whatsappNo || allValues.emailAddress || allValues.collegeName ||
                       allValues.branch || allValues.currentSemester || allValues.applyingFor || allValues.tentativeDates ||
@@ -232,11 +257,14 @@ export function ApplicationForm() {
         lastSavedDataRef.current = currentDataHash
       }
     }
-  }, [currentStep]) // Trigger when step changes
+  }, [currentStep, form, autoSave]) // Include all dependencies
 
   // Auto-save on field changes (debounced) - saves all accumulated data
   useEffect(() => {
     const subscription = form.watch((values) => {
+      // Skip if already saving
+      if (isSavingRef.current) return
+      
       // Clear existing timer
       if (autosaveTimerRef.current) {
         clearTimeout(autosaveTimerRef.current)
@@ -254,10 +282,13 @@ export function ApplicationForm() {
         
         // Debounce: wait 3 seconds after last change before saving
         autosaveTimerRef.current = setTimeout(() => {
+          // Double-check we're not already saving
+          if (isSavingRef.current) return
+          
           const allValues = form.getValues()
           const currentDataHash = JSON.stringify(allValues)
           
-          // Only save if data has changed
+          // Only save if data has changed and we have at least Step 1 data
           if (currentDataHash !== lastSavedDataRef.current && (allValues.fullName || allValues.whatsappNo || allValues.emailAddress)) {
             // Determine step based on current step and available data
             let saveStep = currentStep
@@ -279,7 +310,7 @@ export function ApplicationForm() {
         clearTimeout(autosaveTimerRef.current)
       }
     }
-  }, [form, currentStep])
+  }, [form, currentStep, autoSave]) // Include autoSave in dependencies
 
   // Validate and move to next step
   const handleNext = async () => {
@@ -304,19 +335,38 @@ export function ApplicationForm() {
         collegeName: allFormValues.collegeName
       })
       
-      // Determine which step to save based on available data
-      const hasStep1Data = allFormValues.fullName || allFormValues.whatsappNo || allFormValues.emailAddress || allFormValues.collegeName
-      const hasStep2Data = allFormValues.branch || allFormValues.currentSemester || allFormValues.applyingFor || allFormValues.tentativeDates
-      const hasStep3Data = allFormValues.source || allFormValues.referenceName || allFormValues.query
-      
+      // Determine which step to save based on current step and available data
+      // CRITICAL: When moving from step 1 to step 2, we MUST save step 1 data
       let stepToSave = currentStep
-      if (hasStep3Data) stepToSave = 3
-      else if (hasStep2Data) stepToSave = 2
-      else if (hasStep1Data) stepToSave = 1
+      if (currentStep === 1) {
+        // When on step 1 and moving to step 2, save step 1
+        stepToSave = 1
+      } else if (currentStep === 2) {
+        // When on step 2, save step 2 (which includes step 1 data)
+        stepToSave = 2
+      } else if (currentStep === 3) {
+        // When on step 3, save step 3 (which includes all previous data)
+        stepToSave = 3
+      }
       
       // Save ALL accumulated data BEFORE moving to next step
       // This ensures step 1 data is saved when moving to step 2
-      console.log(`💾 Saving step ${stepToSave} data (includes all previous steps) before moving to step ${currentStep + 1}`)
+      console.log(`💾 [CRITICAL] Saving step ${stepToSave} data (includes all previous steps) before moving to step ${currentStep + 1}`)
+      console.log(`💾 [CRITICAL] Data being saved:`, {
+        step: stepToSave,
+        fullName: allFormValues.fullName,
+        whatsappNo: allFormValues.whatsappNo,
+        emailAddress: allFormValues.emailAddress,
+        collegeName: allFormValues.collegeName,
+        branch: allFormValues.branch,
+        currentSemester: allFormValues.currentSemester,
+        applyingFor: allFormValues.applyingFor,
+        tentativeDates: allFormValues.tentativeDates,
+        source: allFormValues.source,
+        referenceName: allFormValues.referenceName,
+        query: allFormValues.query,
+      })
+      
       await autoSave(stepToSave, allFormValues, true) // Show toast on "Next" button click
       
       // Update last saved data hash
@@ -326,16 +376,6 @@ export function ApplicationForm() {
         // Move to next step
         const nextStep = currentStep + 1
         setCurrentStep(nextStep)
-        
-        // Also save again after step change to ensure data is captured
-        setTimeout(async () => {
-          const updatedValues = form.getValues()
-          const updatedStep = hasStep3Data ? 3 : (hasStep2Data ? 2 : 1)
-          if (updatedStep >= nextStep) {
-            console.log(`💾 Additional save after step change to ${nextStep}`)
-            await autoSave(updatedStep, updatedValues, false) // Silent save
-          }
-        }, 1000)
       } else {
         // Final submission
         await onSubmit(form.getValues())
