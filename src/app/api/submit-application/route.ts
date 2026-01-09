@@ -69,15 +69,29 @@ export async function POST(req: Request) {
           throw new Error(`Google Apps Script returned status ${googleResponse.status}: ${errorText.substring(0, 200)}`);
         }
 
-        const googleResult = await googleResponse.json();
-        console.log('📥 Google Apps Script response:', googleResult);
+        const responseText = await googleResponse.text();
+        console.log('📥 Google Apps Script raw response:', responseText);
+        
+        let googleResult;
+        try {
+          googleResult = JSON.parse(responseText);
+          console.log('📥 Google Apps Script parsed response:', googleResult);
+        } catch (parseError) {
+          console.error('❌ Failed to parse Google Apps Script response:', parseError);
+          throw new Error(`Invalid JSON response from Google Apps Script: ${responseText.substring(0, 200)}`);
+        }
         
         if (!googleResult.success) {
           googleSheetsError = googleResult.message || 'Unknown error from Google Apps Script';
           console.error('❌ Google Sheets error:', googleSheetsError);
+          console.error('❌ Full error response:', googleResult);
         } else {
           googleSheetsSuccess = true;
           console.log(`✅ Application form data saved to Google Sheets successfully (${submissionType}, Step ${step})`);
+          console.log(`✅ Saved to row: ${googleResult.rowNumber || 'unknown'}`);
+          if (googleResult.logs) {
+            console.log('📋 Google Apps Script logs:', googleResult.logs);
+          }
         }
       } catch (googleError) {
         googleSheetsError = googleError instanceof Error ? googleError.message : String(googleError);

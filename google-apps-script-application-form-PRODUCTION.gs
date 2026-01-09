@@ -114,24 +114,33 @@ function doPost(e) {
     const formData = extractFormData(data);
     log('Form data extracted: ' + JSON.stringify(formData), logMessages);
     
-    // Prepare row data
+    // Prepare row data - ensure all 15 columns are filled
     const rowData = [
-      formData.timestamp,
-      formData.step,
-      formData.isPartial ? 'Yes' : 'No',
-      formData.fullName,
-      formData.whatsappNo,
-      formData.emailAddress,
-      formData.collegeName,
-      formData.branch,
-      formData.currentSemester,
-      formData.applyingFor,
-      formData.otherSpecification,
-      formData.tentativeDates,
-      formData.referenceName,
-      formData.source,
-      formData.query
+      formData.timestamp,                    // Column 1: Timestamp
+      formData.step || '',                   // Column 2: Step
+      formData.isPartial ? 'Yes' : 'No',     // Column 3: Is Partial
+      formData.fullName || '',               // Column 4: Full Name
+      formData.whatsappNo || '',            // Column 5: WhatsApp No
+      formData.emailAddress || '',           // Column 6: Email Address
+      formData.collegeName || '',            // Column 7: College Name
+      formData.branch || '',                 // Column 8: Branch
+      formData.currentSemester || '',        // Column 9: Current Semester
+      formData.applyingFor || '',            // Column 10: Applying For
+      formData.otherSpecification || '',     // Column 11: Other Specification
+      formData.tentativeDates || '',         // Column 12: Tentative Dates
+      formData.referenceName || '',          // Column 13: Reference Name
+      formData.source || '',                 // Column 14: Source
+      formData.query || ''                   // Column 15: Query
     ];
+    
+    // Log the row data before appending
+    log('Row data to append: ' + JSON.stringify(rowData), logMessages);
+    log('Row data length: ' + rowData.length + ' (expected: 15)', logMessages);
+    
+    // Validate row data length
+    if (rowData.length !== 15) {
+      throw new Error('Row data length mismatch. Expected 15 columns, got ' + rowData.length);
+    }
     
     // Append data to sheet
     try {
@@ -179,7 +188,13 @@ function doPost(e) {
  * Extract and validate form data from request
  */
 function extractFormData(data) {
-  return {
+  // Log the raw data received for debugging
+  if (CONFIG.LOGGING_ENABLED) {
+    Logger.log('Raw data received: ' + JSON.stringify(data));
+  }
+  
+  // Extract all fields with proper defaults
+  const extracted = {
     timestamp: new Date(),
     step: String(data.step || '').trim(),
     isPartial: data.isPartial !== undefined ? Boolean(data.isPartial) : true,
@@ -196,6 +211,13 @@ function extractFormData(data) {
     source: String(data.source || '').trim(),
     query: String(data.query || '').trim()
   };
+  
+  // Log extracted data for debugging
+  if (CONFIG.LOGGING_ENABLED) {
+    Logger.log('Extracted form data: ' + JSON.stringify(extracted));
+  }
+  
+  return extracted;
 }
 
 /**
